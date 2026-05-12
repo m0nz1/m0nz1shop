@@ -7,7 +7,7 @@ import { Game } from "@/types";
 interface GameListProps {
   games: Game[];
   loading?: boolean;
-  title?: string;
+  title?: React.ReactNode;
   emptyText?: string;
 }
 
