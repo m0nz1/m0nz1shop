@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/admin/StatCard";
 import { TransactionTable } from "@/components/admin/TransactionTable";
 import { ProductForm } from "@/components/admin/ProductForm";
-import { Transaction, Game, Product } from "@/types";
+import { GameForm } from "@/components/admin/GameForm";
+import { PaymentMethodForm } from "@/components/admin/PaymentMethodForm";
+import { GameProductList } from "@/components/admin/GameProductList";
+import { Transaction, Game, Product, PaymentMethod } from "@/types";
 import { formatPrice } from "@/utils";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import toast from "react-hot-toast";
@@ -24,6 +26,9 @@ import {
   Moon,
   Sun,
   Gamepad2,
+  CreditCard,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -33,10 +38,21 @@ export default function AdminDashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Modal states
   const [showProductForm, setShowProductForm] = useState(false);
+  const [showGameForm, setShowGameForm] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingGame, setEditingGame] = useState<Game | null>(null);
+  const [editingPayment, setEditingPayment] = useState<PaymentMethod | null>(null);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"transactions" | "products" | "payments">("products");
+
   const [stats, setStats] = useState({
     totalTransactions: 0,
     totalRevenue: 0,
@@ -60,18 +76,24 @@ export default function AdminDashboardPage() {
   const fetchData = async () => {
     const supabase = createClient();
 
-    const [{ data: txData }, { data: gamesData }, { data: productsData }] = await Promise.all([
+    const [
+      { data: txData },
+      { data: gamesData },
+      { data: productsData },
+      { data: pmData },
+    ] = await Promise.all([
       supabase.from("transactions").select("*, game:games(*), product:products(*)").order("created_at", { ascending: false }),
       supabase.from("games").select("*").order("sort_order"),
       supabase.from("products").select("*, game:games(*)").order("sort_order"),
+      supabase.from("payment_methods").select("*").order("sort_order"),
     ]);
 
     const txs = txData || [];
     setTransactions(txs);
     setGames(gamesData || []);
     setProducts(productsData || []);
+    setPaymentMethods(pmData || []);
 
-    // Calculate stats
     const revenue = txs.filter((t) => t.status === "success").reduce((sum, t) => sum + t.total, 0);
     const uniqueUsers = new Set(txs.map((t) => t.user_id).filter(Boolean));
 
@@ -94,18 +116,13 @@ export default function AdminDashboardPage() {
   const handleStatusChange = async (id: string, status: string) => {
     const supabase = createClient();
     const { error } = await supabase.from("transactions").update({ status }).eq("id", id);
-
-    if (error) {
-      toast.error("Gagal update status");
-    } else {
-      toast.success("Status diupdate!");
-      fetchData();
-    }
+    if (error) toast.error("Gagal update status");
+    else { toast.success("Status diupdate!"); fetchData(); }
   };
 
+  // ========== PRODUCT CRUD ==========
   const handleProductSubmit = async (formData: any) => {
     const supabase = createClient();
-
     if (editingProduct) {
       const { error } = await supabase.from("products").update(formData).eq("id", editingProduct.id);
       if (error) toast.error("Gagal update produk");
@@ -115,7 +132,6 @@ export default function AdminDashboardPage() {
       if (error) toast.error("Gagal tambah produk");
       else toast.success("Produk ditambahkan!");
     }
-
     setShowProductForm(false);
     setEditingProduct(null);
     fetchData();
@@ -123,15 +139,108 @@ export default function AdminDashboardPage() {
 
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("Yakin hapus produk ini?")) return;
-
     const supabase = createClient();
     const { error } = await supabase.from("products").delete().eq("id", id);
-
     if (error) toast.error("Gagal hapus produk");
-    else {
-      toast.success("Produk dihapus!");
-      fetchData();
+    else { toast.success("Produk dihapus!"); fetchData(); }
+  };
+
+  // ========== GAME CRUD ==========
+  const handleGameSubmit = async (formData: any) => {
+    const supabase = createClient();
+    if (editingGame) {
+      const { error } = await supabase.from("games").update(formData).eq("id", editingGame.id);
+      if (error) toast.error("Gagal update game: " + error.message);
+      else toast.success("Game diupdate!");
+    } else {
+      const { error } = await supabase.from("games").insert(formData);
+      if (error) toast.error("Gagal tambah game: " + error.message);
+      else toast.success("Game ditambahkan!");
     }
+    setShowGameForm(false);
+    setEditingGame(null);
+    fetchData();
+  };
+
+  const handleDeleteGame = async (id: string) => {
+    if (!confirm("Yakin hapus game ini? Semua produk terkait akan ikut terhapus!")) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("games").delete().eq("id", id);
+    if (error) toast.error("Gagal hapus game");
+    else { toast.success("Game dihapus!"); fetchData(); }
+  };
+
+  // ========== REORDER ==========
+  const handleReorderGame = async (gameId: string, direction: "up" | "down") => {
+    const supabase = createClient();
+    const currentGame = games.find((g) => g.id === gameId);
+    if (!currentGame) return;
+
+    const sortedGames = [...games].sort((a, b) => a.sort_order - b.sort_order);
+    const currentIndex = sortedGames.findIndex((g) => g.id === gameId);
+    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (swapIndex < 0 || swapIndex >= sortedGames.length) return;
+
+    const swapGame = sortedGames[swapIndex];
+
+    await Promise.all([
+      supabase.from("games").update({ sort_order: swapGame.sort_order }).eq("id", gameId),
+      supabase.from("games").update({ sort_order: currentGame.sort_order }).eq("id", swapGame.id),
+    ]);
+
+    toast.success("Urutan diupdate!");
+    fetchData();
+  };
+
+  const handleReorderProduct = async (productId: string, direction: "up" | "down") => {
+    const supabase = createClient();
+    const currentProduct = products.find((p) => p.id === productId);
+    if (!currentProduct) return;
+
+    const gameProducts = products
+      .filter((p) => p.game_id === currentProduct.game_id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+
+    const currentIndex = gameProducts.findIndex((p) => p.id === productId);
+    const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (swapIndex < 0 || swapIndex >= gameProducts.length) return;
+
+    const swapProduct = gameProducts[swapIndex];
+
+    await Promise.all([
+      supabase.from("products").update({ sort_order: swapProduct.sort_order }).eq("id", productId),
+      supabase.from("products").update({ sort_order: currentProduct.sort_order }).eq("id", swapProduct.id),
+    ]);
+
+    toast.success("Urutan produk diupdate!");
+    fetchData();
+  };
+
+  // ========== PAYMENT METHOD CRUD ==========
+  const handlePaymentSubmit = async (formData: any) => {
+    const supabase = createClient();
+    if (editingPayment) {
+      const { error } = await supabase.from("payment_methods").update(formData).eq("id", editingPayment.id);
+      if (error) toast.error("Gagal update metode pembayaran");
+      else toast.success("Metode pembayaran diupdate!");
+    } else {
+      const { error } = await supabase.from("payment_methods").insert(formData);
+      if (error) toast.error("Gagal tambah metode pembayaran");
+      else toast.success("Metode pembayaran ditambahkan!");
+    }
+    setShowPaymentForm(false);
+    setEditingPayment(null);
+    fetchData();
+  };
+
+  const handleDeletePayment = async (id: string) => {
+    if (!confirm("Yakin hapus metode pembayaran ini?")) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("payment_methods").delete().eq("id", id);
+    if (error) toast.error("Gagal hapus metode pembayaran");
+    else { toast.success("Metode pembayaran dihapus!"); fetchData(); }
   };
 
   const filteredTransactions = searchQuery
@@ -187,139 +296,201 @@ export default function AdminDashboardPage() {
       <div className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            title="Total Transaksi"
-            value={stats.totalTransactions}
-            icon={ShoppingCart}
-            color="yellow"
-          />
-          <StatCard
-            title="Pendapatan"
-            value={formatPrice(stats.totalRevenue)}
-            icon={DollarSign}
-            color="green"
-          />
-          <StatCard
-            title="Total User"
-            value={stats.totalUsers}
-            icon={Users}
-            color="purple"
-          />
-          <StatCard
-            title="Total Produk"
-            value={stats.totalProducts}
-            icon={Package}
-            color="yellow"
-          />
+          <StatCard title="Total Transaksi" value={stats.totalTransactions} icon={ShoppingCart} color="yellow" />
+          <StatCard title="Pendapatan" value={formatPrice(stats.totalRevenue)} icon={DollarSign} color="green" />
+          <StatCard title="Total User" value={stats.totalUsers} icon={Users} color="purple" />
+          <StatCard title="Total Produk" value={stats.totalProducts} icon={Package} color="yellow" />
         </div>
 
-        {/* Transactions */}
-        <div className="bg-brutal-light-card dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Search className="w-4 h-4 text-gray-500" />
-            <Input
-              placeholder="Cari transaksi..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
+        {/* Tabs */}
+        <div className="flex gap-2 border-b-2 border-black dark:border-brutal-border-dark pb-2">
+          {[
+            { key: "products" as const, label: "Game & Produk", icon: Gamepad2 },
+            { key: "transactions" as const, label: "Transaksi", icon: ShoppingCart },
+            { key: "payments" as const, label: "Pembayaran", icon: CreditCard },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-4 py-2 font-bold text-sm rounded-brutal border-2 transition-all ${
+                  isActive
+                    ? "bg-brutal-yellow dark:bg-brutal-purple text-black dark:text-white border-black dark:border-brutal-border-dark shadow-brutal dark:shadow-brutal-dark"
+                    : "bg-white dark:bg-brutal-dark-card text-gray-600 dark:text-gray-400 border-black dark:border-brutal-border-dark hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ===== PRODUCTS TAB ===== */}
+        {activeTab === "products" && (
+          <div className="space-y-4">
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                onClick={() => { setEditingProduct(null); setShowProductForm(true); }}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Tambah Produk
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => { setEditingGame(null); setShowGameForm(true); }}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Tambah Game
+              </Button>
+            </div>
+
+            {/* Product Form Modal */}
+            {showProductForm && (
+              <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
+                <h3 className="font-bold text-black dark:text-white mb-3">
+                  {editingProduct ? "Edit Produk" : "Tambah Produk"}
+                </h3>
+                <ProductForm
+                  games={games}
+                  product={editingProduct}
+                  onSubmit={handleProductSubmit}
+                  onCancel={() => { setShowProductForm(false); setEditingProduct(null); }}
+                />
+              </div>
+            )}
+
+            {/* Game Form Modal */}
+            {showGameForm && (
+              <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
+                <h3 className="font-bold text-black dark:text-white mb-3">
+                  {editingGame ? "Edit Game" : "Tambah Game"}
+                </h3>
+                <GameForm
+                  game={editingGame}
+                  onSubmit={handleGameSubmit}
+                  onCancel={() => { setShowGameForm(false); setEditingGame(null); }}
+                />
+              </div>
+            )}
+
+            {/* Game & Product List */}
+            <GameProductList
+              games={games}
+              products={products}
+              onEditProduct={(p) => { setEditingProduct(p); setShowProductForm(true); }}
+              onDeleteProduct={handleDeleteProduct}
+              onEditGame={(g) => { setEditingGame(g); setShowGameForm(true); }}
+              onDeleteGame={handleDeleteGame}
+              onReorderGame={handleReorderGame}
+              onReorderProduct={handleReorderProduct}
             />
           </div>
-          <TransactionTable
-            transactions={filteredTransactions}
-            onStatusChange={handleStatusChange}
-            onRefresh={fetchData}
-          />
-        </div>
+        )}
 
-        {/* Products */}
-        <div className="bg-brutal-light-card dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-black text-lg text-black dark:text-white flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              Produk
-            </h2>
-            <Button size="sm" onClick={() => { setEditingProduct(null); setShowProductForm(true); }}>
-              <Plus className="w-4 h-4 mr-1" />
-              Tambah
-            </Button>
-          </div>
-
-          {showProductForm && (
-            <div className="mb-4 p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
-              <ProductForm
-                games={games}
-                product={editingProduct}
-                onSubmit={handleProductSubmit}
-                onCancel={() => { setShowProductForm(false); setEditingProduct(null); }}
+        {/* ===== TRANSACTIONS TAB ===== */}
+        {activeTab === "transactions" && (
+          <div className="bg-brutal-light-card dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Search className="w-4 h-4 text-gray-500" />
+              <Input
+                placeholder="Cari transaksi..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1"
               />
             </div>
-          )}
+            <TransactionTable
+              transactions={filteredTransactions}
+              onStatusChange={handleStatusChange}
+              onRefresh={fetchData}
+            />
+          </div>
+        )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100 dark:bg-gray-800 border-b-2 border-black dark:border-brutal-border-dark">
-                <tr>
-                  <th className="px-3 py-2 text-left font-bold text-black dark:text-white">Nama</th>
-                  <th className="px-3 py-2 text-left font-bold text-black dark:text-white">Game</th>
-                  <th className="px-3 py-2 text-left font-bold text-black dark:text-white">Harga</th>
-                  <th className="px-3 py-2 text-left font-bold text-black dark:text-white">Status</th>
-                  <th className="px-3 py-2 text-left font-bold text-black dark:text-white">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/10 dark:divide-white/10">
-                {products.map((product) => (
-                  <tr key={product.id} className="bg-white dark:bg-brutal-dark-card">
-                    <td className="px-3 py-2 font-bold text-black dark:text-white">{product.name}</td>
-                    <td className="px-3 py-2 text-black dark:text-white">{product.game?.name}</td>
-                    <td className="px-3 py-2 font-bold text-black dark:text-white">{formatPrice(product.price)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${product.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                        {product.is_active ? "Aktif" : "Nonaktif"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => { setEditingProduct(product); setShowProductForm(true); }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => handleDeleteProduct(product.id)}
-                        >
-                          Hapus
-                        </Button>
+        {/* ===== PAYMENTS TAB ===== */}
+        {activeTab === "payments" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-black text-lg text-black dark:text-white flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Metode Pembayaran
+              </h2>
+              <Button
+                size="sm"
+                onClick={() => { setEditingPayment(null); setShowPaymentForm(true); }}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Tambah
+              </Button>
+            </div>
+
+            {showPaymentForm && (
+              <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
+                <h3 className="font-bold text-black dark:text-white mb-3">
+                  {editingPayment ? "Edit Metode Pembayaran" : "Tambah Metode Pembayaran"}
+                </h3>
+                <PaymentMethodForm
+                  method={editingPayment}
+                  onSubmit={handlePaymentSubmit}
+                  onCancel={() => { setShowPaymentForm(false); setEditingPayment(null); }}
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {paymentMethods.map((pm) => (
+                <div
+                  key={pm.id}
+                  className="bg-white dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-brutal border border-black/20 flex items-center justify-center overflow-hidden">
+                      {pm.logo_url ? (
+                        <img src={pm.logo_url} alt={pm.name} className="w-10 h-10 object-contain" />
+                      ) : (
+                        <span className="text-xs font-bold">{pm.code.toUpperCase().slice(0, 3)}</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-black dark:text-white">{pm.name}</span>
+                        {!pm.is_active && (
+                          <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">NONAKTIF</span>
+                        )}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {pm.type} | Fee: {formatPrice(pm.fee)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => { setEditingPayment(pm); setShowPaymentForm(true); }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleDeletePayment(pm.id)}
+                    >
+                      Hapus
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Games */}
-        <div className="bg-brutal-light-card dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
-          <h2 className="font-black text-lg text-black dark:text-white flex items-center gap-2 mb-4">
-            <Gamepad2 className="w-5 h-5" />
-            Games
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {games.map((game) => (
-              <Card key={game.id} className="p-3">
-                <p className="font-bold text-sm text-black dark:text-white">{game.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{game.category}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {game.requires_server_id ? "Butuh Server ID" : "Tanpa Server ID"}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ export function ProductForm({ games, product, onSubmit, onCancel }: ProductFormP
   const [formData, setFormData] = useState({
     game_id: product?.game_id || games[0]?.id || "",
     name: product?.name || "",
+    description: product?.description || "",
     price: product?.price || 0,
     original_price: product?.original_price || 0,
     nominal: product?.nominal || "",
@@ -49,12 +50,23 @@ export function ProductForm({ games, product, onSubmit, onCancel }: ProductFormP
         label="Nama Produk"
         value={formData.name}
         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        placeholder="contoh: 86 Diamond"
         required
       />
 
+      <div>
+        <label className="block text-sm font-bold mb-1.5 text-black dark:text-white">Deskripsi</label>
+        <textarea
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          className="w-full px-3 py-2.5 bg-white dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal text-black dark:text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brutal-yellow dark:focus:ring-brutal-purple focus:ring-offset-2 dark:focus:ring-offset-brutal-dark-bg transition-all min-h-[60px] resize-y"
+          placeholder="Deskripsi produk..."
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <Input
-          label="Harga"
+          label="Harga (IDR)"
           type="number"
           value={formData.price}
           onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
@@ -68,43 +80,48 @@ export function ProductForm({ games, product, onSubmit, onCancel }: ProductFormP
         />
       </div>
 
-      <Input
-        label="Nominal"
-        value={formData.nominal}
-        onChange={(e) => setFormData({ ...formData, nominal: e.target.value })}
-        required
-      />
-
-      <Input
-        label="Bonus (opsional)"
-        value={formData.bonus}
-        onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
-      />
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="is_promo"
-          checked={formData.is_promo}
-          onChange={(e) => setFormData({ ...formData, is_promo: e.target.checked })}
-          className="w-4 h-4 border-2 border-black rounded"
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          label="Nominal"
+          value={formData.nominal}
+          onChange={(e) => setFormData({ ...formData, nominal: e.target.value })}
+          placeholder="contoh: 86"
+          required
         />
-        <label htmlFor="is_promo" className="text-sm font-bold text-black dark:text-white">Promo</label>
+        <Input
+          label="Bonus (opsional)"
+          value={formData.bonus}
+          onChange={(e) => setFormData({ ...formData, bonus: e.target.value })}
+          placeholder="contoh: 8 Bonus"
+        />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="is_active"
-          checked={formData.is_active}
-          onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-          className="w-4 h-4 border-2 border-black rounded"
-        />
-        <label htmlFor="is_active" className="text-sm font-bold text-black dark:text-white">Aktif</label>
+      <div className="flex flex-wrap gap-4">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_promo"
+            checked={formData.is_promo}
+            onChange={(e) => setFormData({ ...formData, is_promo: e.target.checked })}
+            className="w-4 h-4 border-2 border-black rounded"
+          />
+          <label htmlFor="is_promo" className="text-sm font-bold text-black dark:text-white">Promo</label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_active"
+            checked={formData.is_active}
+            onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+            className="w-4 h-4 border-2 border-black rounded"
+          />
+          <label htmlFor="is_active" className="text-sm font-bold text-black dark:text-white">Aktif</label>
+        </div>
       </div>
 
       <div className="flex gap-2 pt-2">
-        <Button type="submit" className="flex-1">Simpan</Button>
+        <Button type="submit" className="flex-1">{product ? "Update Produk" : "Tambah Produk"}</Button>
         <Button type="button" variant="outline" onClick={onCancel}>Batal</Button>
       </div>
     </form>
