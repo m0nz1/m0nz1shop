@@ -50,14 +50,5 @@ export default function ProfilePage() {
           );
         })}
       </div>
-
-      {/* Admin Link */}
-      <Link href="/admin/login">
-        <Button variant="secondary" className="w-full">
-          <Shield className="w-4 h-4 mr-2" />
-          Admin Dashboard
-        </Button>
-      </Link>
-    </div>
   );
 }
