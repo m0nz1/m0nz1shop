@@ -12,9 +12,10 @@ import { OrderSummary } from "@/components/payment/OrderSummary";
 import { Badge } from "@/components/ui/Badge";
 import { Game, Product, PaymentMethod } from "@/types";
 import { ProductSkeleton } from "@/components/skeletons";
-import { Search, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function GameDetailPage() {
   const params = useParams();
@@ -70,29 +71,48 @@ export default function GameDetailPage() {
   };
 
   const checkUsername = async () => {
-    if (!userId) {
+    if (!userId.trim()) {
       toast.error("Masukkan User ID terlebih dahulu");
       return;
     }
 
     setCheckingUsername(true);
+    setUsername("");
 
-    // Simulasi API check username
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const res = await fetch("/api/check-username", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          userId: userId.trim(), 
+          gameSlug: slug,
+          serverId: serverId.trim() || undefined,
+        }),
+      });
 
-    // Simulasi hasil
-    setUsername(`Player_${userId.slice(0, 5)}`);
-    toast.success("Username ditemukan!");
-    setCheckingUsername(false);
+      const data = await res.json();
+
+      if (data.success && data.username) {
+        setUsername(data.username);
+        toast.success(`Username ditemukan: ${data.username}`);
+      } else {
+        // Tampilkan error detail dari API
+        toast.error(data.error || "Username tidak ditemukan");
+      }
+    } catch {
+      toast.error("Gagal cek username. Coba lagi.");
+    } finally {
+      setCheckingUsername(false);
+    }
   };
 
   const handleCheckout = async () => {
-    if (!selectedProduct || !selectedPayment || !userId) {
+    if (!selectedProduct || !selectedPayment || !userId.trim()) {
       toast.error("Lengkapi semua data terlebih dahulu");
       return;
     }
 
-    if (game?.requires_server_id && !serverId) {
+    if (game?.requires_server_id && !serverId.trim()) {
       toast.error("Server ID wajib diisi");
       return;
     }
@@ -106,8 +126,8 @@ export default function GameDetailPage() {
         body: JSON.stringify({
           game_id: game?.id,
           product_id: selectedProduct.id,
-          user_id: userId,
-          server_id: serverId || null,
+          user_id: userId.trim(),
+          server_id: serverId.trim() || null,
           username: username || null,
           payment_method: selectedPayment.code,
           price: selectedProduct.price,
@@ -153,9 +173,9 @@ export default function GameDetailPage() {
         <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
         <h2 className="text-xl font-black text-black dark:text-white">Game tidak ditemukan</h2>
         <p className="text-gray-500 dark:text-gray-400 mt-2">Silakan kembali ke beranda</p>
-        <Button className="mt-4" onClick={() => router.push("/")}>
-          Kembali
-        </Button>
+        <Link href="/">
+          <Button className="mt-4">Kembali</Button>
+        </Link>
       </div>
     );
   }
@@ -194,7 +214,10 @@ export default function GameDetailPage() {
                     label="User ID"
                     placeholder="Masukkan User ID"
                     value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
+                    onChange={(e) => {
+                      setUserId(e.target.value);
+                      setUsername("");
+                    }}
                   />
                 </div>
                 <div className="pt-7">
@@ -221,9 +244,9 @@ export default function GameDetailPage() {
 
               {username && (
                 <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border-2 border-green-500 rounded-brutal">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                   <div>
-                    <p className="text-xs text-green-600 dark:text-green-400 font-bold">Username ditemukan</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 font-bold">Username Terverifikasi</p>
                     <p className="text-sm font-bold text-black dark:text-white">{username}</p>
                   </div>
                 </div>

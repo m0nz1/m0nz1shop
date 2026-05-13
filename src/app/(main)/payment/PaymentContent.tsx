@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Transaction } from "@/types";
-import { formatPrice, formatDate, getStatusLabel, getStatusColor } from "@/utils";
+import { formatPrice, formatDate, getStatusLabel } from "@/utils";
 import { useRealtimeTransaction } from "@/hooks/useRealtime";
 import { QRCodeSVG } from "qrcode.react";
 import { Copy, RefreshCw, Clock, CheckCircle, XCircle, AlertCircle, ArrowLeft } from "lucide-react";
@@ -43,7 +43,6 @@ export default function PaymentContent() {
     fetchTransaction();
   }, [fetchTransaction]);
 
-  // Realtime updates
   useRealtimeTransaction(invoiceId || "", (updated) => {
     setTransaction((prev) => (prev ? { ...prev, ...updated } : null));
     if (updated.status === "success") {
@@ -51,7 +50,6 @@ export default function PaymentContent() {
     }
   });
 
-  // Countdown timer
   useEffect(() => {
     if (!transaction?.expired_at) return;
 
@@ -117,11 +115,10 @@ export default function PaymentContent() {
   return (
     <div className="max-w-lg mx-auto space-y-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Link href="/">
-          <Button variant="outline" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Kembali
+          <Button variant="outline" size="sm" className="!px-3 !py-2">
+            <ArrowLeft className="w-4 h-4" />
           </Button>
         </Link>
         <h1 className="font-black text-xl text-black dark:text-white">Status Pembayaran</h1>
@@ -176,16 +173,16 @@ export default function PaymentContent() {
       <Card className="p-4">
         <h3 className="font-bold text-black dark:text-white mb-3">Detail Transaksi</h3>
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-gray-500 dark:text-gray-400">Invoice ID</span>
-            <button onClick={copyInvoice} className="flex items-center gap-1 font-mono font-bold text-black dark:text-white hover:text-brutal-yellow">
+            <button onClick={copyInvoice} className="flex items-center gap-1 font-mono text-xs font-bold text-black dark:text-white hover:text-brutal-yellow">
               {transaction.invoice_id}
               <Copy className="w-3 h-3" />
             </button>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500 dark:text-gray-400">Game</span>
-            <span className="font-bold text-black dark:text-white">{transaction.game?.name}</span>
+            <span className="font-bold text-black dark:text-white text-right">{transaction.game?.name}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500 dark:text-gray-400">User ID</span>
@@ -206,20 +203,20 @@ export default function PaymentContent() {
         </div>
       </Card>
 
-      {/* Actions */}
-      <div className="flex gap-2">
+      {/* Actions - rapih */}
+      <div className="grid grid-cols-2 gap-3">
         <Button
           variant="outline"
-          className="flex-1"
           onClick={handleRefresh}
           isLoading={refreshing}
+          className="w-full"
         >
-          <RefreshCw className="w-4 h-4 mr-1" />
-          Refresh Status
+          <RefreshCw className="w-4 h-4 mr-1.5" />
+          Refresh
         </Button>
-        <Link href="/history" className="flex-1">
+        <Link href="/history" className="w-full">
           <Button variant="secondary" className="w-full">
-            Lihat Riwayat
+            Riwayat
           </Button>
         </Link>
       </div>

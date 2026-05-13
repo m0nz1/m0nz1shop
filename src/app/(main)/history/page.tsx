@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Transaction } from "@/types";
-import { formatPrice, formatDate, getStatusLabel, getStatusColor } from "@/utils";
+import { formatPrice, formatDate, getStatusLabel } from "@/utils";
 import { TransactionSkeleton } from "@/components/skeletons";
 import { Search, Copy, ArrowRight, History, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
@@ -16,7 +16,7 @@ import Link from "next/link";
 export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const searchTransactions = async () => {
@@ -27,16 +27,23 @@ export default function HistoryPage() {
 
     setLoading(true);
     setSearched(true);
+    setTransactions([]);
 
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("transactions")
-      .select("*, game:games(*), product:products(*)")
-      .or(`invoice_id.ilike.%${searchQuery}%,user_id.ilike.%${searchQuery}%`)
-      .order("created_at", { ascending: false });
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("transactions")
+        .select("*, game:games(*), product:products(*)")
+        .or(`invoice_id.ilike.%${searchQuery.trim()}%,user_id.ilike.%${searchQuery.trim()}%`)
+        .order("created_at", { ascending: false });
 
-    setTransactions(data || []);
-    setLoading(false);
+      setTransactions(data || []);
+    } catch {
+      toast.error("Gagal mencari transaksi");
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const copyInvoice = (id: string) => {
@@ -59,7 +66,7 @@ export default function HistoryPage() {
         <div className="flex gap-2">
           <div className="flex-1">
             <Input
-              placeholder="Contoh: INV-20240101-123456"
+              placeholder="Contoh: INV-20260101-123456"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && searchTransactions()}
@@ -87,7 +94,7 @@ export default function HistoryPage() {
             Pastikan Invoice ID atau User ID benar
           </p>
         </div>
-      ) : (
+      ) : searched ? (
         <div className="space-y-3">
           {transactions.map((tx) => (
             <Card key={tx.id} className="p-4">
@@ -144,7 +151,7 @@ export default function HistoryPage() {
             </Card>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

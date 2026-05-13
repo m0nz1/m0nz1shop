@@ -368,9 +368,9 @@ export default function AdminDashboardPage() {
         {/* Tabs */}
         <div className="flex gap-2 border-b-2 border-black dark:border-brutal-border-dark pb-2">
           {[
-            { key: "products" as const, label: "Game & Produk", icon: Gamepad2 },
+            { key: "products" as const, label: "Produk", icon: Gamepad2 },
             { key: "transactions" as const, label: "Transaksi", icon: ShoppingCart },
-            { key: "payments" as const, label: "Pembayaran", icon: CreditCard },
+            { key: "payments" as const, label: "Bayar", icon: CreditCard },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -378,7 +378,7 @@ export default function AdminDashboardPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2 font-bold text-sm rounded-brutal border-2 transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold text-sm rounded-brutal border-2 transition-all whitespace-nowrap ${
                   isActive
                     ? "bg-brutal-yellow dark:bg-brutal-purple text-black dark:text-white border-black dark:border-brutal-border-dark shadow-brutal dark:shadow-brutal-dark"
                     : "bg-white dark:bg-brutal-dark-card text-gray-600 dark:text-gray-400 border-black dark:border-brutal-border-dark hover:bg-gray-50 dark:hover:bg-gray-800"
