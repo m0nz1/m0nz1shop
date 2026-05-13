@@ -27,8 +27,6 @@ import {
   Sun,
   Gamepad2,
   CreditCard,
-  ChevronUp,
-  ChevronDown,
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -113,25 +111,42 @@ export default function AdminDashboardPage() {
     router.push("/admin/login");
   };
 
+  // ========== TRANSACTION STATUS UPDATE ==========
   const handleStatusChange = async (id: string, status: string) => {
-    const supabase = createClient();
-    const { error } = await supabase.from("transactions").update({ status }).eq("id", id);
-    if (error) toast.error("Gagal update status");
-    else { toast.success("Status diupdate!"); fetchData(); }
+    const res = await fetch("/api/admin/transactions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal update status");
+    } else {
+      toast.success("Status diupdate!");
+      fetchData();
+    }
   };
 
-  // ========== PRODUCT CRUD ==========
+  // ========== PRODUCT CRUD (via API) ==========
   const handleProductSubmit = async (formData: any) => {
-    const supabase = createClient();
-    if (editingProduct) {
-      const { error } = await supabase.from("products").update(formData).eq("id", editingProduct.id);
-      if (error) toast.error("Gagal update produk");
-      else toast.success("Produk diupdate!");
+    const url = editingProduct ? "/api/admin/products" : "/api/admin/products";
+    const method = editingProduct ? "PATCH" : "POST";
+    const body = editingProduct ? { id: editingProduct.id, ...formData } : formData;
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal simpan produk");
     } else {
-      const { error } = await supabase.from("products").insert(formData);
-      if (error) toast.error("Gagal tambah produk");
-      else toast.success("Produk ditambahkan!");
+      toast.success(editingProduct ? "Produk diupdate!" : "Produk ditambahkan!");
     }
+
     setShowProductForm(false);
     setEditingProduct(null);
     fetchData();
@@ -139,24 +154,36 @@ export default function AdminDashboardPage() {
 
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("Yakin hapus produk ini?")) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) toast.error("Gagal hapus produk");
-    else { toast.success("Produk dihapus!"); fetchData(); }
+
+    const res = await fetch(`/api/admin/products?id=${id}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (!data.success) {
+      toast.error(data.error || "Gagal hapus produk");
+    } else {
+      toast.success("Produk dihapus!");
+      fetchData();
+    }
   };
 
-  // ========== GAME CRUD ==========
+  // ========== GAME CRUD (via API) ==========
   const handleGameSubmit = async (formData: any) => {
-    const supabase = createClient();
-    if (editingGame) {
-      const { error } = await supabase.from("games").update(formData).eq("id", editingGame.id);
-      if (error) toast.error("Gagal update game: " + error.message);
-      else toast.success("Game diupdate!");
+    const method = editingGame ? "PATCH" : "POST";
+    const body = editingGame ? { id: editingGame.id, ...formData } : formData;
+
+    const res = await fetch("/api/admin/games", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal simpan game");
     } else {
-      const { error } = await supabase.from("games").insert(formData);
-      if (error) toast.error("Gagal tambah game: " + error.message);
-      else toast.success("Game ditambahkan!");
+      toast.success(editingGame ? "Game diupdate!" : "Game ditambahkan!");
     }
+
     setShowGameForm(false);
     setEditingGame(null);
     fetchData();
@@ -164,37 +191,50 @@ export default function AdminDashboardPage() {
 
   const handleDeleteGame = async (id: string) => {
     if (!confirm("Yakin hapus game ini? Semua produk terkait akan ikut terhapus!")) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("games").delete().eq("id", id);
-    if (error) toast.error("Gagal hapus game");
-    else { toast.success("Game dihapus!"); fetchData(); }
+
+    const res = await fetch(`/api/admin/games?id=${id}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (!data.success) {
+      toast.error(data.error || "Gagal hapus game");
+    } else {
+      toast.success("Game dihapus!");
+      fetchData();
+    }
   };
 
-  // ========== REORDER ==========
+  // ========== REORDER (via API) ==========
   const handleReorderGame = async (gameId: string, direction: "up" | "down") => {
-    const supabase = createClient();
-    const currentGame = games.find((g) => g.id === gameId);
-    if (!currentGame) return;
-
     const sortedGames = [...games].sort((a, b) => a.sort_order - b.sort_order);
     const currentIndex = sortedGames.findIndex((g) => g.id === gameId);
     const swapIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
 
     if (swapIndex < 0 || swapIndex >= sortedGames.length) return;
 
+    const currentGame = sortedGames[currentIndex];
     const swapGame = sortedGames[swapIndex];
 
-    await Promise.all([
-      supabase.from("games").update({ sort_order: swapGame.sort_order }).eq("id", gameId),
-      supabase.from("games").update({ sort_order: currentGame.sort_order }).eq("id", swapGame.id),
-    ]);
+    const items = [
+      { id: currentGame.id, sort_order: swapGame.sort_order },
+      { id: swapGame.id, sort_order: currentGame.sort_order },
+    ];
 
-    toast.success("Urutan diupdate!");
-    fetchData();
+    const res = await fetch("/api/admin/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ table: "games", items }),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal reorder");
+    } else {
+      toast.success("Urutan diupdate!");
+      fetchData();
+    }
   };
 
   const handleReorderProduct = async (productId: string, direction: "up" | "down") => {
-    const supabase = createClient();
     const currentProduct = products.find((p) => p.id === productId);
     if (!currentProduct) return;
 
@@ -209,27 +249,44 @@ export default function AdminDashboardPage() {
 
     const swapProduct = gameProducts[swapIndex];
 
-    await Promise.all([
-      supabase.from("products").update({ sort_order: swapProduct.sort_order }).eq("id", productId),
-      supabase.from("products").update({ sort_order: currentProduct.sort_order }).eq("id", swapProduct.id),
-    ]);
+    const items = [
+      { id: currentProduct.id, sort_order: swapProduct.sort_order },
+      { id: swapProduct.id, sort_order: currentProduct.sort_order },
+    ];
 
-    toast.success("Urutan produk diupdate!");
-    fetchData();
+    const res = await fetch("/api/admin/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ table: "products", items }),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal reorder");
+    } else {
+      toast.success("Urutan produk diupdate!");
+      fetchData();
+    }
   };
 
-  // ========== PAYMENT METHOD CRUD ==========
+  // ========== PAYMENT METHOD CRUD (via API) ==========
   const handlePaymentSubmit = async (formData: any) => {
-    const supabase = createClient();
-    if (editingPayment) {
-      const { error } = await supabase.from("payment_methods").update(formData).eq("id", editingPayment.id);
-      if (error) toast.error("Gagal update metode pembayaran");
-      else toast.success("Metode pembayaran diupdate!");
+    const method = editingPayment ? "PATCH" : "POST";
+    const body = editingPayment ? { id: editingPayment.id, ...formData } : formData;
+
+    const res = await fetch("/api/admin/payment-methods", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      toast.error(data.error || "Gagal simpan metode pembayaran");
     } else {
-      const { error } = await supabase.from("payment_methods").insert(formData);
-      if (error) toast.error("Gagal tambah metode pembayaran");
-      else toast.success("Metode pembayaran ditambahkan!");
+      toast.success(editingPayment ? "Metode pembayaran diupdate!" : "Metode pembayaran ditambahkan!");
     }
+
     setShowPaymentForm(false);
     setEditingPayment(null);
     fetchData();
@@ -237,10 +294,16 @@ export default function AdminDashboardPage() {
 
   const handleDeletePayment = async (id: string) => {
     if (!confirm("Yakin hapus metode pembayaran ini?")) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("payment_methods").delete().eq("id", id);
-    if (error) toast.error("Gagal hapus metode pembayaran");
-    else { toast.success("Metode pembayaran dihapus!"); fetchData(); }
+
+    const res = await fetch(`/api/admin/payment-methods?id=${id}`, { method: "DELETE" });
+    const data = await res.json();
+
+    if (!data.success) {
+      toast.error(data.error || "Gagal hapus metode pembayaran");
+    } else {
+      toast.success("Metode pembayaran dihapus!");
+      fetchData();
+    }
   };
 
   const filteredTransactions = searchQuery
@@ -331,55 +394,29 @@ export default function AdminDashboardPage() {
         {/* ===== PRODUCTS TAB ===== */}
         {activeTab === "products" && (
           <div className="space-y-4">
-            {/* Action Buttons */}
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => { setEditingProduct(null); setShowProductForm(true); }}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Tambah Produk
+              <Button size="sm" onClick={() => { setEditingProduct(null); setShowProductForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> Tambah Produk
               </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => { setEditingGame(null); setShowGameForm(true); }}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Tambah Game
+              <Button size="sm" variant="secondary" onClick={() => { setEditingGame(null); setShowGameForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> Tambah Game
               </Button>
             </div>
 
-            {/* Product Form Modal */}
             {showProductForm && (
               <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
-                <h3 className="font-bold text-black dark:text-white mb-3">
-                  {editingProduct ? "Edit Produk" : "Tambah Produk"}
-                </h3>
-                <ProductForm
-                  games={games}
-                  product={editingProduct}
-                  onSubmit={handleProductSubmit}
-                  onCancel={() => { setShowProductForm(false); setEditingProduct(null); }}
-                />
+                <h3 className="font-bold text-black dark:text-white mb-3">{editingProduct ? "Edit Produk" : "Tambah Produk"}</h3>
+                <ProductForm games={games} product={editingProduct} onSubmit={handleProductSubmit} onCancel={() => { setShowProductForm(false); setEditingProduct(null); }} />
               </div>
             )}
 
-            {/* Game Form Modal */}
             {showGameForm && (
               <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
-                <h3 className="font-bold text-black dark:text-white mb-3">
-                  {editingGame ? "Edit Game" : "Tambah Game"}
-                </h3>
-                <GameForm
-                  game={editingGame}
-                  onSubmit={handleGameSubmit}
-                  onCancel={() => { setShowGameForm(false); setEditingGame(null); }}
-                />
+                <h3 className="font-bold text-black dark:text-white mb-3">{editingGame ? "Edit Game" : "Tambah Game"}</h3>
+                <GameForm game={editingGame} onSubmit={handleGameSubmit} onCancel={() => { setShowGameForm(false); setEditingGame(null); }} />
               </div>
             )}
 
-            {/* Game & Product List */}
             <GameProductList
               games={games}
               products={products}
@@ -398,18 +435,9 @@ export default function AdminDashboardPage() {
           <div className="bg-brutal-light-card dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
             <div className="flex items-center gap-2 mb-4">
               <Search className="w-4 h-4 text-gray-500" />
-              <Input
-                placeholder="Cari transaksi..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
-              />
+              <Input placeholder="Cari transaksi..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1" />
             </div>
-            <TransactionTable
-              transactions={filteredTransactions}
-              onStatusChange={handleStatusChange}
-              onRefresh={fetchData}
-            />
+            <TransactionTable transactions={filteredTransactions} onStatusChange={handleStatusChange} onRefresh={fetchData} />
           </div>
         )}
 
@@ -418,37 +446,23 @@ export default function AdminDashboardPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-black text-lg text-black dark:text-white flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Metode Pembayaran
+                <CreditCard className="w-5 h-5" /> Metode Pembayaran
               </h2>
-              <Button
-                size="sm"
-                onClick={() => { setEditingPayment(null); setShowPaymentForm(true); }}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Tambah
+              <Button size="sm" onClick={() => { setEditingPayment(null); setShowPaymentForm(true); }}>
+                <Plus className="w-4 h-4 mr-1" /> Tambah
               </Button>
             </div>
 
             {showPaymentForm && (
               <div className="p-4 border-2 border-black dark:border-brutal-border-dark rounded-brutal bg-gray-50 dark:bg-gray-900">
-                <h3 className="font-bold text-black dark:text-white mb-3">
-                  {editingPayment ? "Edit Metode Pembayaran" : "Tambah Metode Pembayaran"}
-                </h3>
-                <PaymentMethodForm
-                  method={editingPayment}
-                  onSubmit={handlePaymentSubmit}
-                  onCancel={() => { setShowPaymentForm(false); setEditingPayment(null); }}
-                />
+                <h3 className="font-bold text-black dark:text-white mb-3">{editingPayment ? "Edit Metode Pembayaran" : "Tambah Metode Pembayaran"}</h3>
+                <PaymentMethodForm method={editingPayment} onSubmit={handlePaymentSubmit} onCancel={() => { setShowPaymentForm(false); setEditingPayment(null); }} />
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {paymentMethods.map((pm) => (
-                <div
-                  key={pm.id}
-                  className="bg-white dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4"
-                >
+                <div key={pm.id} className="bg-white dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-brutal border border-black/20 flex items-center justify-center overflow-hidden">
                       {pm.logo_url ? (
@@ -460,31 +474,14 @@ export default function AdminDashboardPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-black dark:text-white">{pm.name}</span>
-                        {!pm.is_active && (
-                          <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">NONAKTIF</span>
-                        )}
+                        {!pm.is_active && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded">NONAKTIF</span>}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {pm.type} | Fee: {formatPrice(pm.fee)}
-                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{pm.type} | Fee: {formatPrice(pm.fee)}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => { setEditingPayment(pm); setShowPaymentForm(true); }}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDeletePayment(pm.id)}
-                    >
-                      Hapus
-                    </Button>
+                    <Button variant="outline" size="sm" className="flex-1" onClick={() => { setEditingPayment(pm); setShowPaymentForm(true); }}>Edit</Button>
+                    <Button variant="danger" size="sm" onClick={() => handleDeletePayment(pm.id)}>Hapus</Button>
                   </div>
                 </div>
               ))}
