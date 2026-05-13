@@ -81,19 +81,7 @@ export default async function HomePage() {
       <section>
         <SearchGame games={games} />
       </section>
-
-      {/* Categories */}
-      <section className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        {["Semua", "Popular", "Trending", "New", "RPG", "FPS", "MOBA"].map((cat) => (
-          <button
-            key={cat}
-            className="flex-shrink-0 px-4 py-2 bg-white dark:bg-brutal-dark-card border-2 border-black dark:border-brutal-border-dark rounded-brutal shadow-brutal dark:shadow-brutal-dark font-bold text-sm hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-brutal-active active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all"
-          >
-            {cat}
-          </button>
-        ))}
-      </section>
-
+      
       {/* Recommended */}
       <section>
         <GameList
